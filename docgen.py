@@ -3,14 +3,17 @@
 
 from argparse import ArgumentParser, Namespace
 from enum import Enum
+import re
 
 
 class DocGenState(Enum):
     NONE = 0
     INSIDE_UNORDERED_LIST = 1
     INSIDE_ORDERED_LIST = 2
-    INSIDE_CODE_BLOCK = 3
-    INSIDE_PARAGRAPH = 4
+    INSIDE_FENCED_CODE_BLOCK = 3
+    INSIDE_INDENTED_CODE_BLOCK = 4
+    INSIDE_BLOCKQUOTE = 5
+    INSIDE_PARAGRAPH = 6
 
 
 class DocGen:
@@ -20,8 +23,7 @@ class DocGen:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GameLISP Docs</title>
-  <link href="css/style.css" rel="stylesheet" />
+  <title>Docs</title>
 </head>
 <body>
 """
@@ -38,6 +40,7 @@ class DocGen:
 
         self.toc: list[str] = []
         self.heading_levels: list[int] = [0, 0, 0, 0, 0, 0]
+        self.depth: int = 0
 
         self.state: DocGenState = DocGenState.NONE
 
@@ -48,24 +51,43 @@ class DocGen:
         self.content: str = ""
         self.lines: list[str] = self.read_lines()
         for line in self.lines:
+            if self.state == DocGenState.INSIDE_FENCED_CODE_BLOCK:
+                if line.startswith("```"):
+                    self.parse_fenced_code_block(line)
+                else:
+                    self.emit(line)
+                continue
+
             if not line:
                 self.change_state(DocGenState.NONE)
                 continue
 
-            char: str = line[0]
-            if char == "#":
+            if line == "---" or line == "___" or line == "***":
+                self.parse_horizontal_rule()
+                continue
+
+            if line.startswith("# ") or line.startswith("##"):
                 self.parse_header(line)
                 continue
 
-            if char == "-" or char == "+":
-                self.parse_unordered_list(line)
+            if line.startswith("> "):
+                self.parse_blockquote(line)
                 continue
 
-            if line.startswith("1."):
-                self.parse_ordered_list(line)
+            if m := re.match(r"^(\s*)[-+*] (.*)$", line):
+                self.parse_unordered_list(m)
+                continue
+
+            if m := re.match(r"^(\d+)\. (.*)$", line):
+                self.parse_ordered_list(m)
+                continue
 
             if line.startswith("```"):
-                self.parse_code_block(line)
+                self.parse_fenced_code_block(line)
+                continue
+
+            if line.startswith("    "):
+                self.parse_indented_code_block(line)
                 continue
 
             self.parse_paragraph(line)
@@ -78,10 +100,17 @@ class DocGen:
     def read_lines(self) -> list[str]:
         """Reads the file into lines"""
         with open(self.infile) as f:
-            return [line.strip() for line in f.readlines()]
+            lines: list[str] = []
+            for line in f.readlines():
+                lines.append(line.rstrip().replace("\t", "  "))
+
+            return lines
+
+    def parse_horizontal_rule(self) -> None:
+        self.emit("<hr/>")
 
     def parse_header(self, line: str) -> None:
-        """Parses a Markdown header"""
+        """Parses a header (<hx></hx>)"""
         heading_level: int = 0
         while line[heading_level] == "#":
             heading_level += 1
@@ -100,8 +129,15 @@ class DocGen:
 
         self.print_status(f"H{heading_level}: {heading_content}")
 
+    def parse_blockquote(self, line: str) -> None:
+        """Parses a block quote (<blockquote></blockquote>)"""
+        self.change_state(DocGenState.INSIDE_BLOCKQUOTE)
+
+        html: str = self.parse_inline_text(line[1:].strip())
+        self.emit(html)
+
     def get_heading_numbering(self, heading_level: int) -> str:
-        """Returns the heading"""
+        """Returns the heading numbers"""
         if heading_level < 6:
             self.heading_levels[heading_level] = 0
 
@@ -113,18 +149,135 @@ class DocGen:
 
         return numbering
 
-    def parse_unordered_list(self, line: str) -> None:
+    def parse_unordered_list(self, m: re.Match) -> None:
+        """Parses an unordered list (<ul></ul>)"""
         self.change_state(DocGenState.INSIDE_UNORDERED_LIST)
 
-    def parse_ordered_list(self, line: str) -> None:
+        # depth: int = len(m.group(1))
+        item: str = self.parse_inline_text(m.group(2))
+        self.emit(f"<li>{item}</li>")
+
+    def parse_ordered_list(self, m: re.Match) -> None:
+        """Parses an ordered list (<ol></ol>)"""
         self.change_state(DocGenState.INSIDE_ORDERED_LIST)
 
-    def parse_code_block(self, line: str) -> None:
-        self.change_state(DocGenState.INSIDE_CODE_BLOCK)
+        # depth: int = len(m.group(1))
+        item: str = self.parse_inline_text(m.group(2))
+        self.emit(f"<li>{item}</li>")
+
+    def parse_fenced_code_block(self, line: str) -> None:
+        """Parses a fenced code block (<pre><code></code></pre>)"""
+        if self.state == DocGenState.INSIDE_FENCED_CODE_BLOCK:
+            self.change_state(DocGenState.NONE)
+            return
+
+        self.change_state(DocGenState.INSIDE_FENCED_CODE_BLOCK)
+        if line == "```":
+            self.emit("<code>")
+        else:
+            extension: str = line[3:]
+            self.emit(f'<code class="language-{extension}">')
+
+    def parse_indented_code_block(self, line: str) -> None:
+        """Parses an indented code block (<pre><code></code></pre>)"""
+        self.change_state(DocGenState.INSIDE_INDENTED_CODE_BLOCK)
+        self.emit(line.strip())
 
     def parse_paragraph(self, line: str) -> None:
+        """Parses a paragraph (<p></p>)"""
         if self.state == DocGenState.NONE:
             self.change_state(DocGenState.INSIDE_PARAGRAPH)
+
+        html: str = self.parse_inline_text(line)
+        self.emit(html)
+
+    def parse_inline_text(self, text: str) -> str:
+        """Parses inline text (<b></b>, <i></i>, etc.)"""
+        if self.state == DocGenState.INSIDE_FENCED_CODE_BLOCK:
+            return text
+
+        self.stack: list[str] = [""]
+        self.inside_code: bool = False
+
+        text += " "
+        html: str = ""
+
+        i: int = 0
+        while i < len(text) - 1:
+            char: str = text[i]
+            if char == "`":
+                html += self.get_code_tag("`")
+            elif not self.inside_code:
+                if char == "*":
+                    if text[i + 1] == "*":
+                        i += 1
+                        html += self.get_bold_tag("**")
+                    else:
+                        html += self.get_italics_tag("*")
+                elif char == "_":
+                    if text[i + 1] == "_":
+                        i += 1
+                        html += self.get_bold_tag("__")
+                    else:
+                        html += self.get_italics_tag("_")
+                elif char == "~":
+                    if text[i + 1] == "~":
+                        i += 1
+                        html += self.get_strikethrough_tag("~~")
+                    else:
+                        html += self.get_subscript_tag("~")
+                elif char == "`":
+                    html += self.get_code_tag("`")
+                else:
+                    html += char
+            else:
+                html += char
+
+            i += 1
+
+        return html
+
+    def get_bold_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</b>"
+
+        self.stack.append(tag)
+        return "<b>"
+
+    def get_italics_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</i>"
+
+        self.stack.append(tag)
+        return "<i>"
+
+    def get_strikethrough_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</s>"
+
+        self.stack.append(tag)
+        return "<s>"
+
+    def get_subscript_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</sub>"
+
+        self.stack.append(tag)
+        return "<sub>"
+
+    def get_code_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.inside_code = False
+            self.stack.pop()
+            return "</code>"
+
+        self.inside_code = True
+        self.stack.append(tag)
+        return "<code>"
 
     def add_to_toc(self, numbering: str) -> None:
         numbering = "h" + numbering.replace(".", "-")
@@ -137,9 +290,22 @@ class DocGen:
     def save_to_outfile(self) -> None:
         """Saves the converted HTML to the output file"""
         with open(self.outfile, "w") as f:
-            f.write(self.TEMPLATE_START)
+            self.write_template_start(f)
             f.write(self.content)
             f.write(self.TEMPLATE_END)
+
+    def write_template_start(self, f) -> None:
+        f.write(self.TEMPLATE_START)
+        with open("lib/highlight.min.js") as js:
+            f.write("<script>\n")
+            f.write(js.read())
+            f.write("hljs.highlightAll();\n")
+            f.write("</script>\n")
+
+        with open("lib/highlight.min.css") as css:
+            f.write("<style>\n")
+            f.write(css.read())
+            f.write("</style>\n")
 
     def print_status(self, msg: str) -> None:
         """Prints a status message, if verbose output is on"""
@@ -155,8 +321,13 @@ class DocGen:
                 self.emit("</ul>")
             case DocGenState.INSIDE_ORDERED_LIST:
                 self.emit("</ol>")
-            case DocGenState.INSIDE_CODE_BLOCK:
+            case (
+                DocGenState.INSIDE_FENCED_CODE_BLOCK
+                | DocGenState.INSIDE_INDENTED_CODE_BLOCK
+            ):
                 self.emit("</code></pre>")
+            case DocGenState.INSIDE_BLOCKQUOTE:
+                self.emit("</p></blockquote>")
             case DocGenState.INSIDE_PARAGRAPH:
                 self.emit("</p>")
 
@@ -166,8 +337,13 @@ class DocGen:
                 self.emit("<ul>")
             case DocGenState.INSIDE_ORDERED_LIST:
                 self.emit("<ol>")
-            case DocGenState.INSIDE_CODE_BLOCK:
+            case (
+                DocGenState.INSIDE_FENCED_CODE_BLOCK
+                | DocGenState.INSIDE_INDENTED_CODE_BLOCK
+            ):
                 self.emit("<pre>")
+            case DocGenState.INSIDE_BLOCKQUOTE:
+                self.emit("<blockquote><p>")
             case DocGenState.INSIDE_PARAGRAPH:
                 self.emit("<p>")
 
