@@ -42,6 +42,9 @@ class DocGen:
         self.heading_levels: list[int] = [0, 0, 0, 0, 0, 0]
         self.depth: int = 0
 
+        self.footnotes: dict[str, tuple[int, str]] = {}
+        self.footnote_num: int = 1
+
         self.state: DocGenState = DocGenState.NONE
 
     def generate(self) -> None:
@@ -50,6 +53,8 @@ class DocGen:
 
         self.content: str = ""
         self.lines: list[str] = self.read_lines()
+        self.ids: dict[str, str] = self.load_ids()
+        print(self.ids)
         for line in self.lines:
             if self.state == DocGenState.INSIDE_FENCED_CODE_BLOCK:
                 if line.startswith("```"):
@@ -58,7 +63,7 @@ class DocGen:
                     self.emit(line)
                 continue
 
-            if not line:
+            if not line or re.match(r"^\[(.*)\]: (.*)$", line):
                 self.change_state(DocGenState.NONE)
                 continue
 
@@ -97,6 +102,24 @@ class DocGen:
 
         print("Done!")
 
+    def load_ids(self) -> dict[str, str]:
+        ids: dict[str, str] = {}
+        for i in range(len(self.lines)):
+            line: str = self.lines[i]
+
+            self.lines[i] = re.sub(r"\\<", "&lt;", self.lines[i])
+            self.lines[i] = re.sub(r"\\>", "&gt;", self.lines[i])
+            if m := re.match(r"^\[(.*)\]: (.*)$", line):
+                id: str = m.group(1).strip()
+                link: str = m.group(2).strip()
+
+                if id[0] == "^":
+                    self.footnotes[id] = (-1, link)
+                else:
+                    ids[id] = link
+
+        return ids
+
     def read_lines(self) -> list[str]:
         """Reads the file into lines"""
         with open(self.infile) as f:
@@ -116,9 +139,12 @@ class DocGen:
             heading_level += 1
 
         if heading_level > 6:
-            raise Exception("heading level exceeded 6")
+            self.parse_paragraph(line)
+            return
 
         heading_content: str = line[heading_level:].strip()
+        heading_content = self.parse_inline_text(heading_content)
+
         numbering: str = self.get_heading_numbering(heading_level)
         self.add_to_toc(numbering)
 
@@ -159,9 +185,9 @@ class DocGen:
 
     def parse_ordered_list(self, m: re.Match) -> None:
         """Parses an ordered list (<ol></ol>)"""
+        self.ol_offset = int(m.group(1))
         self.change_state(DocGenState.INSIDE_ORDERED_LIST)
 
-        # depth: int = len(m.group(1))
         item: str = self.parse_inline_text(m.group(2))
         self.emit(f"<li>{item}</li>")
 
@@ -202,6 +228,11 @@ class DocGen:
         text += " "
         html: str = ""
 
+        text = re.sub(r"\[(\^.+?)\]", self.replace_footnotes, text)
+        text = re.sub(r"!\[(.*?)\]\((.*?)\)", self.replace_images, text)
+        text = re.sub(r"!\[(.*?)\]\[(.*?)\]", self.replace_images_with_id, text)
+        text = re.sub(r"\[(.*?)\]\((.*?)\)", self.replace_links, text)
+
         i: int = 0
         while i < len(text) - 1:
             char: str = text[i]
@@ -226,8 +257,14 @@ class DocGen:
                         html += self.get_strikethrough_tag("~~")
                     else:
                         html += self.get_subscript_tag("~")
+                elif char == "^":
+                    html += self.get_superscript_tag("^")
                 elif char == "`":
                     html += self.get_code_tag("`")
+                elif char == "+" and text[i + 1] == "+":
+                    html += self.get_inserted_tag("++")
+                elif char == "=" and text[i + 1] == "=":
+                    html += self.get_marked_tag("==")
                 else:
                     html += char
             else:
@@ -236,6 +273,38 @@ class DocGen:
             i += 1
 
         return html
+
+    def replace_footnotes(self, m: re.Match) -> str:
+        id: str = m.group(1)
+        num, definition = self.footnotes[id]
+        if num == -1:
+            num = self.footnote_num
+            self.footnote_num += 1
+            self.footnotes[id] = (num, definition)
+
+        return f'<sup><a href="#fn{num}">[{num}]</a></sup>'
+
+    def replace_images(self, m: re.Match) -> str:
+        alt: str = m.group(1)
+        link: str = m.group(2)
+        return f'<img src="{link}" alt="{alt}" />'
+
+    def replace_images_with_id(self, m: re.Match) -> str:
+        alt: str = m.group(1)
+
+        id: str = m.group(2)
+        link: str = self.ids[id]
+
+        return f'<img src="{link}" alt="{alt}" />'
+
+    def replace_links(self, m: re.Match) -> str:
+        name: str = m.group(1)
+
+        link: str = m.group(2)
+        if link in self.ids:
+            link = self.ids[link]
+
+        return f'<a href="{link}">{name}</a>'
 
     def get_bold_tag(self, tag: str) -> str:
         if self.stack[len(self.stack) - 1] == tag:
@@ -269,6 +338,14 @@ class DocGen:
         self.stack.append(tag)
         return "<sub>"
 
+    def get_superscript_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</sup>"
+
+        self.stack.append(tag)
+        return "<sup>"
+
     def get_code_tag(self, tag: str) -> str:
         if self.stack[len(self.stack) - 1] == tag:
             self.inside_code = False
@@ -278,6 +355,22 @@ class DocGen:
         self.inside_code = True
         self.stack.append(tag)
         return "<code>"
+
+    def get_inserted_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</ins>"
+
+        self.stack.append(tag)
+        return "<ins>"
+
+    def get_marked_tag(self, tag: str) -> str:
+        if self.stack[len(self.stack) - 1] == tag:
+            self.stack.pop()
+            return "</mark>"
+
+        self.stack.append(tag)
+        return "<mark>"
 
     def add_to_toc(self, numbering: str) -> None:
         numbering = "h" + numbering.replace(".", "-")
@@ -336,7 +429,7 @@ class DocGen:
             case DocGenState.INSIDE_UNORDERED_LIST:
                 self.emit("<ul>")
             case DocGenState.INSIDE_ORDERED_LIST:
-                self.emit("<ol>")
+                self.emit(f'<ol start="{self.ol_offset}">')
             case (
                 DocGenState.INSIDE_FENCED_CODE_BLOCK
                 | DocGenState.INSIDE_INDENTED_CODE_BLOCK

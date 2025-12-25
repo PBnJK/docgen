@@ -1310,19 +1310,19 @@ hljs.highlightAll();
   <p>
   Ordered
   </p>
-  <ol>
+  <ol start="1">
   <li>Lorem ipsum dolor sit amet</li>
   <li>Consectetur adipiscing elit</li>
   <li>Integer molestie lorem at massa</li>
   </ol>
-  <ol>
+  <ol start="4">
   <li>You can use sequential numbers...</li>
   <li>...or keep all the numbers as <code>1.</code></li>
   </ol>
   <p>
   Start numbering with offset:
   </p>
-  <ol>
+  <ol start="57">
   <li>foo</li>
   <li>bar</li>
   </ol>
@@ -1377,81 +1377,72 @@ hljs.highlightAll();
   </p>
   <h2>1.8. Links</h2>
   <p>
-  [link text](http://dev.nodeca.com)
+  <a href="http://dev.nodeca.com">link text</a>
   </p>
   <p>
-  [link with title](http://nodeca.github.io/pica/demo/ "title text!")
+  <a href="http://nodeca.github.io/pica/demo/ "title text!"">link with title</a>
   </p>
   <p>
   Autoconverted link https://github.com/nodeca/pica (enable linkify to see)
   </p>
   <h2>1.9. Images</h2>
   <p>
-  ![Minion](https://octodex.github.com/images/minion.png)
-  ![Stormtroopocat](https://octodex.github.com/images/stormtroopocat.jpg "The Stormtroopocat")
+  <img src="https://octodex.github.com/images/minion.png" alt="Minion" />
+  <img src="https://octodex.github.com/images/stormtroopocat.jpg "The Stormtroopocat"" alt="Stormtroopocat" />
   </p>
   <p>
   Like links, Images also have a footnote style syntax
   </p>
   <p>
-  ![Alt text][id]
+  <img src="https://octodex.github.com/images/dojocat.jpg "The Dojocat"" alt="Alt text" />
   </p>
   <p>
   With a reference later in the document defining the URL location:
   </p>
-  <p>
-  [id]: https://octodex.github.com/images/dojocat.jpg "The Dojocat"
-  </p>
   <h2>1.10. Plugins</h2>
   <p>
   The killer feature of <code>markdown-it</code> is very effective support of
-  [syntax plugins](https://www.npmjs.org/browse/keyword/markdown-it-plugin).
+  <a href="https://www.npmjs.org/browse/keyword/markdown-it-plugin">syntax plugins</a>.
   </p>
-  <h3>1.10.1. [Emojies](https://github.com/markdown-it/markdown-it-emoji)</h3>
+  <h3>1.10.1. <a href="https://github.com/markdown-it/markdown-it-emoji">Emojies</a></h3>
   <blockquote><p>
   Classic markup: :wink: :cry: :laughing: :yum:
   >
   Shortcuts (emoticons): :-) :-( 8-) ;)
   </p></blockquote>
   <p>
-  see [how to change output](https://github.com/markdown-it/markdown-it-emoji#change-output) with twemoji.
+  see <a href="https://github.com/markdown-it/markdown-it-emoji#change-output">how to change output</a> with twemoji.
   </p>
-  <h3>1.10.2. [Subscript](https://github.com/markdown-it/markdown-it-sub) / [Superscript](https://github.com/markdown-it/markdown-it-sup)</h3>
+  <h3>1.10.2. <a href="https://github.com/markdown-it/markdown-it-sub">Subscript</a> / <a href="https://github.com/markdown-it/markdown-it-sup">Superscript</a></h3>
   <ul>
-  <li>19^th^</li>
+  <li>19<sup>th</sup></li>
   <li>H<sub>2</sub>O</li>
   </ul>
-  <h3>1.10.3. [\<ins>](https://github.com/markdown-it/markdown-it-ins)</h3>
+  <h3>1.10.3. <a href="https://github.com/markdown-it/markdown-it-ins">&lt;ins></a></h3>
   <p>
-  ++Inserted text++
+  <ins>+Inserted text</ins>+
   </p>
-  <h3>1.10.4. [\<mark>](https://github.com/markdown-it/markdown-it-mark)</h3>
+  <h3>1.10.4. <a href="https://github.com/markdown-it/markdown-it-mark">&lt;mark></a></h3>
   <p>
-  ==Marked text==
+  <mark>=Marked text</mark>=
   </p>
-  <h3>1.10.5. [Footnotes](https://github.com/markdown-it/markdown-it-footnote)</h3>
+  <h3>1.10.5. <a href="https://github.com/markdown-it/markdown-it-footnote">Footnotes</a></h3>
   <p>
-  Footnote 1 link[^first].
-  </p>
-  <p>
-  Footnote 2 link[^second].
+  Footnote 1 link<sup><a href="#fn1">[1]</a></sup>.
   </p>
   <p>
-  Inline footnote^[Text of inline footnote] definition.
+  Footnote 2 link<sup><a href="#fn2">[2]</a></sup>.
   </p>
   <p>
-  Duplicated footnote reference[^second].
+  Inline footnote<sup>[Text of inline footnote] definition.
   </p>
   <p>
-  [^first]: Footnote <b>can have markup</b>
+  Duplicated footnote reference<sup><a href="#fn2">[2]</a></sup>.
   </p>
   <pre>
   and multiple paragraphs.
   </code></pre>
-  <p>
-  [^second]: Footnote text.
-  </p>
-  <h3>1.10.6. [Abbreviations](https://github.com/markdown-it/markdown-it-abbr)</h3>
+  <h3>1.10.6. <a href="https://github.com/markdown-it/markdown-it-abbr">Abbreviations</a></h3>
   <p>
   This is HTML abbreviation example.
   </p>
