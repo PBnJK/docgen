@@ -24,6 +24,8 @@ class DocGen:
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Docs</title>
+
+  <link href="css/docs.css" rel="stylesheet>
 </head>
 <body>
 """
@@ -228,6 +230,7 @@ class DocGen:
         text += " "
         html: str = ""
 
+        text = re.sub(r"\[(@.*?)\]", self.replace_code_inlining, text)
         text = re.sub(r"\[(\^.+?)\]", self.replace_footnotes, text)
         text = re.sub(r"!\[(.*?)\]\((.*?)\)", self.replace_images, text)
         text = re.sub(r"!\[(.*?)\]\[(.*?)\]", self.replace_images_with_id, text)
@@ -273,6 +276,10 @@ class DocGen:
             i += 1
 
         return html
+
+    def replace_code_inlining(self, m: re.Match) -> str:
+        id: str = m.group(1)
+        return f"{id}"
 
     def replace_footnotes(self, m: re.Match) -> str:
         id: str = m.group(1)
