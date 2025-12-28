@@ -1,1 +1,4 @@
 __pycache__/
+
+# Generated test files
+*.html
