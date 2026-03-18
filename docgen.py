@@ -5,6 +5,7 @@ from argparse import ArgumentParser, Namespace
 from contextlib import chdir
 from pathlib import Path
 
+
 import tomllib
 
 
@@ -61,6 +62,10 @@ class DocGen:
 
         self.project_version: str = config.get("version", "Unknown Version")
 
+    def generate(self) -> None:
+        """Generates the project documentation"""
+        pass
+
     def print_status(self, msg: str) -> None:
         """Wrapper to print status messages"""
         if self.verbose:
@@ -70,14 +75,16 @@ class DocGen:
 def main() -> None:
     """Entry-point of the program"""
     args: Namespace = parse_arguments()
+
     docgen: DocGen = DocGen(args.directory, args.output, args.verbose)
+    docgen.generate()
 
 
 def parse_arguments() -> Namespace:
     """Parses the arguments from the command line"""
     parser: ArgumentParser = ArgumentParser(
         prog="docgen",
-        description="generates the documentation for GameLISP from a Markdown file",
+        description="generates documentation from a Markdown file",
         epilog="pedrob",
     )
 

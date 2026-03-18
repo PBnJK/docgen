@@ -5,6 +5,23 @@ from enum import Enum
 import re
 
 
+class TokenType(Enum):
+    TEXT = 0
+    H1 = 1
+    H2 = 2
+    H3 = 3
+    H4 = 4
+    H5 = 5
+    H6 = 6
+    ERROR = 255
+
+
+class Token:
+    def __init__(self, tktype: TokenType, value: str) -> None:
+        self.type = tktype
+        self.value = value
+
+
 class MarkdownParserState(Enum):
     NONE = 0
     INSIDE_UNORDERED_LIST = 1
@@ -34,15 +51,17 @@ class MarkdownParser:
         print("Starting generation...")
 
         self.content: str = ""
+        self.tokens: list[Token] = []
+
         self.lines: list[str] = self.read_lines()
         self.ids: dict[str, str] = self.load_ids()
-        print(self.ids)
+
         for line in self.lines:
             if self.state == MarkdownParserState.INSIDE_FENCED_CODE_BLOCK:
                 if line.startswith("```"):
                     self.parse_fenced_code_block(line)
                 else:
-                    self.emit(line)
+                    self.emit_html(line)
                 continue
 
             if not line or re.match(r"^\[(.*)\]: (.*)$", line):
@@ -54,7 +73,7 @@ class MarkdownParser:
                 continue
 
             if line.startswith("# ") or line.startswith("##"):
-                self.parse_header(line)
+                self.parse_heading(line)
                 continue
 
             if line.startswith("> "):
@@ -109,10 +128,10 @@ class MarkdownParser:
 
     def parse_horizontal_rule(self) -> None:
         """Parses a horizontal rule (<hr />)"""
-        self.emit("<hr />")
+        self.emit_html("<hr />")
 
-    def parse_header(self, line: str) -> None:
-        """Parses a header (<hx></hx>)"""
+    def parse_heading(self, line: str) -> None:
+        """Parses a heading (<hx></hx>)"""
         heading_level: int = 0
         while line[heading_level] == "#":
             heading_level += 1
@@ -130,7 +149,7 @@ class MarkdownParser:
         html: str = (
             f"<h{heading_level}>{numbering} {heading_content}</h{heading_level}>"
         )
-        self.emit(html)
+        self.emit_html(html)
 
         self.print_status(f"H{heading_level}: {heading_content}")
 
@@ -139,7 +158,7 @@ class MarkdownParser:
         self.change_state(MarkdownParserState.INSIDE_BLOCKQUOTE)
 
         html: str = self.parse_inline_text(line[1:].strip())
-        self.emit(html)
+        self.emit_html(html)
 
     def get_heading_numbering(self, heading_level: int) -> str:
         """Returns the heading numbers"""
@@ -160,7 +179,7 @@ class MarkdownParser:
 
         # depth: int = len(m.group(1))
         item: str = self.parse_inline_text(m.group(2))
-        self.emit(f"<li>{item}</li>")
+        self.emit_html(f"<li>{item}</li>")
 
     def parse_ordered_list(self, m: re.Match) -> None:
         """Parses an ordered list (<ol></ol>)"""
@@ -168,7 +187,7 @@ class MarkdownParser:
         self.change_state(MarkdownParserState.INSIDE_ORDERED_LIST)
 
         item: str = self.parse_inline_text(m.group(2))
-        self.emit(f"<li>{item}</li>")
+        self.emit_html(f"<li>{item}</li>")
 
     def parse_fenced_code_block(self, line: str) -> None:
         """Parses a fenced code block (<pre><code></code></pre>)"""
@@ -178,15 +197,15 @@ class MarkdownParser:
 
         self.change_state(MarkdownParserState.INSIDE_FENCED_CODE_BLOCK)
         if line == "```":
-            self.emit("<code>")
+            self.emit_html("<code>")
         else:
             extension: str = line[3:]
-            self.emit(f'<code class="language-{extension}">')
+            self.emit_html(f'<code class="language-{extension}">')
 
     def parse_indented_code_block(self, line: str) -> None:
         """Parses an indented code block (<pre><code></code></pre>)"""
         self.change_state(MarkdownParserState.INSIDE_INDENTED_CODE_BLOCK)
-        self.emit(line.strip())
+        self.emit_html(line.strip())
 
     def parse_paragraph(self, line: str) -> None:
         """Parses a paragraph (<p></p>)"""
@@ -194,7 +213,7 @@ class MarkdownParser:
             self.change_state(MarkdownParserState.INSIDE_PARAGRAPH)
 
         html: str = self.parse_inline_text(line)
-        self.emit(html)
+        self.emit_html(html)
 
     def parse_inline_text(self, text: str) -> str:
         """Parses inline text (<b></b>, <i></i>, etc.)"""
@@ -348,7 +367,11 @@ class MarkdownParser:
         numbering = "h" + numbering.replace(".", "-")
         self.toc.append(numbering)
 
-    def emit(self, html: str) -> None:
+    def emit(self, token: Token) -> None:
+        """Emits a token to content buffer"""
+        self.tokens.append(token)
+
+    def emit_html(self, html: str) -> None:
         """Emits HTML to content buffer"""
         self.content += f"  {html}\n"
 
@@ -364,31 +387,31 @@ class MarkdownParser:
 
         match self.state:
             case MarkdownParserState.INSIDE_UNORDERED_LIST:
-                self.emit("</ul>")
+                self.emit_html("</ul>")
             case MarkdownParserState.INSIDE_ORDERED_LIST:
-                self.emit("</ol>")
+                self.emit_html("</ol>")
             case (
                 MarkdownParserState.INSIDE_FENCED_CODE_BLOCK
                 | MarkdownParserState.INSIDE_INDENTED_CODE_BLOCK
             ):
-                self.emit("</code></pre>")
+                self.emit_html("</code></pre>")
             case MarkdownParserState.INSIDE_BLOCKQUOTE:
-                self.emit("</p></blockquote>")
+                self.emit_html("</p></blockquote>")
             case MarkdownParserState.INSIDE_PARAGRAPH:
-                self.emit("</p>")
+                self.emit_html("</p>")
 
         self.state = to
         match self.state:
             case MarkdownParserState.INSIDE_UNORDERED_LIST:
-                self.emit("<ul>")
+                self.emit_html("<ul>")
             case MarkdownParserState.INSIDE_ORDERED_LIST:
-                self.emit(f'<ol start="{self.ol_offset}">')
+                self.emit_html(f'<ol start="{self.ol_offset}">')
             case (
                 MarkdownParserState.INSIDE_FENCED_CODE_BLOCK
                 | MarkdownParserState.INSIDE_INDENTED_CODE_BLOCK
             ):
-                self.emit("<pre>")
+                self.emit_html("<pre>")
             case MarkdownParserState.INSIDE_BLOCKQUOTE:
-                self.emit("<blockquote><p>")
+                self.emit_html("<blockquote><p>")
             case MarkdownParserState.INSIDE_PARAGRAPH:
-                self.emit("<p>")
+                self.emit_html("<p>")
